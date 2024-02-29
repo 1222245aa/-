@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nowcoder.community.dao.MessageMapper">
+    <sql id="selectFiles">
+        id, from_id, to_id, conversation_id, content, status, create_time
+    </sql>
+    <sql id="insertFiles">
+         from_id, to_id, conversation_id, content, status, create_time
+    </sql>
+<!--    keyProperty主键自增长-->
+    <insert id="insertMessage"  parameterType="Message" keyProperty="id">
+        insert into message (<include refid="insertFiles"></include>)
+        values (#{fromId},#{toId},#{conversationId},#{content},#{status},#{createTime})
+    </insert>
+    <update id="updateStatus">
+        update message set status = #{status}
+        where id in
+--               foreach用来循环 item为遍历ids的来的值
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+
+    </update>
+    <select id="selectConversations" resultType="Message">
+    select <include refid="selectFiles"></include>
+    from message
+        --     由于我们要返回会话列表的最新的一条私信，我们需要对id进行条件限制获得每个会话的最大的id即就是最新的一条私信
+    where id in (
+        select max(id) from message
+--         2未删除状态
+        where status != 2
+--             1表示为系统发送的通知不是私信
+        and from_id != 1
+--     表示用户即可能是发信人也可能是收信人，显示最新的一条消息可能是发送也是接受
+        and (from_id = #{userId} or to_id = #{userId})
+        group by conversation_id
+        )
+        order by id desc
+        limit #{offset}, #{limit}
+    </select>
+    <select id="selectConversationCount" resultType="int">
+-- 统计最大id的数量就是统计会话的数量
+        select count(m.maxid) from (
+      select max(id) as maxid from message
+--         2未删除状态
+         where status != 2
+--             1表示为系统发送的通知不是私信
+        and from_id != 1
+        and (from_id = #{userId} or to_id = #{userId})
+          group by conversation_id
+                                     )
+as m
+    </select>
+
+    <select id="selectLetters" resultType="Message">
+        select <include refid="selectFiles"></include>
+        from message where  status != 2
+        and from_id != 1
+        and conversation_id = #{conversationId}
+        order by id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="selectLettersCount" resultType="int">
+        select count(id)
+        from message where  status != 2
+        and from_id != 1
+         and conversation_id = #{conversationId}
+    </select>
+    <select id="selectLetterUnreadCount" resultType="int">
+        select count(id) from message
+        where status = 0
+        and from_id != 1
+        and to_id = #{userId}
+--           有conversationId无conversationId发分别查询会话里的未读私信，未读会话
+        <if test="conversationId != null">
+            and conversation_id = #{conversationId}
+        </if>
+    </select>
+    <select id="selectLatestNotice" resultType="Message">
+        select <include refid="selectFiles"></include>
+        from message where id in (
+            select max(id) from message where
+            from_id = 1
+            and status != 2
+            and to_id = #{userId}
+            and conversation_id = #{topic}
+        )
+
+    </select>
+    <select id="selectNoticeCount" resultType="int">
+        select count(id) from message where
+            from_id = 1
+         and status != 2
+            and to_id = #{userId}
+              and conversation_id = #{topic}
+    </select>
+    <select id="selectNoticeUnreadCount" resultType="int">
+        select count(id) from message where
+            from_id = 1
+                                        and status = 0
+            and to_id = #{userId}
+                                        <if test = "topic!=null">
+                                            and conversation_id = #{topic}
+                                        </if>
+
+    </select>
+    <select id="selectNotices" resultType="Message">
+        select <include refid="selectFiles"></include>
+        from message
+        where status != 2
+        and from_id = 1
+        and to_id = #{userId}
+        and conversation_id = #{topic}
+        order by create_time desc
+        limit #{offset}, #{limit}
+
+    </select>
+
+
+</mapper>
